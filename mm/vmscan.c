@@ -176,6 +176,12 @@ int kswapd_threads_current = DEF_KSWAPD_THREADS_PER_NODE;
  */
 #ifndef CONFIG_INCREASE_MAXIMUM_SWAPPINESS
 int vm_swappiness = 100;
+#ifdef CONFIG_OPLUS_MM_HACKS
+/*
+ * Direct reclaim swappiness, values range from 0 .. 60. Higher means more swappy.
+ */
+int direct_vm_swappiness = 60;
+#endif /* CONFIG_OPLUS_MM_HACKS */
 #else
 int vm_swappiness = 190;
 #endif
@@ -1881,6 +1887,10 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
  */
 static int current_may_throttle(void)
 {
+#ifdef CONFIG_OPLUS_MM_HACKS
+	if ((current->signal->oom_score_adj < 0))
+		return 0;
+#endif /* CONFIG_OPLUS_MM_HACKS */
 	return !(current->flags & PF_LESS_THROTTLE) ||
 		current->backing_dev_info == NULL ||
 		bdi_write_congested(current->backing_dev_info);
@@ -2307,14 +2317,13 @@ static bool inactive_list_is_low(struct lruvec *lruvec, bool file,
 		inactive_ratio = 0;
 	} else {
 		gb = (inactive + active) >> (30 - PAGE_SHIFT);
-#ifdef VENDOR_EDIT
-/*Huacai.Zhou@PSW.BSP.Kernel.MM, 2018-04-28, fix direct reclaim slow issue*/
-		if (gb && file)
+#ifdef CONFIG_OPLUS_MM_HACKS
+		if (file && gb)
 			inactive_ratio = min(2UL, int_sqrt(10 * gb));
 #else
 		if (gb)
 			inactive_ratio = int_sqrt(10 * gb);
-#endif /*VENDOR_EDIT*/
+#endif /* CONFIG_OPLUS_MM_HACKS */
 		else
 			inactive_ratio = 1;
 	}
@@ -2371,17 +2380,18 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long anon, file;
 	unsigned long ap, fp;
 	enum lru_list lru;
-#ifdef VENDOR_EDIT //yixue.ge@psw.bsp.kernel 20170720 add for add direct_vm_swappiness
-	if (!current_is_kswapd()) {
+#ifdef CONFIG_OPLUS_MM_HACKS
+	unsigned long totalswap = total_swap_pages;
+#endif /* CONFIG_OPLUS_MM_HACKS */
+
+#ifdef CONFIG_OPLUS_MM_HACKS
+	if (!current_is_kswapd())
 		swappiness = direct_vm_swappiness;
-	}
-#endif
-	/* If we have no swap space, do not bother scanning anon pages. */
-#ifndef VENDOR_EDIT //yixue.ge@psw.bsp.kernel.driver 20170810 modify for reserver some zram disk size
-	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
+	if (!sc->may_swap || (mem_cgroup_get_nr_swap_pages(memcg) <= totalswap>>6)) {
 #else
-	if (!sc->may_swap || (mem_cgroup_get_nr_swap_pages(memcg) <= total_swap_pages>>6)) {
-#endif
+	/* If we have no swap space, do not bother scanning anon pages. */
+	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
+#endif /* CONFIG_OPLUS_MM_HACKS */
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
