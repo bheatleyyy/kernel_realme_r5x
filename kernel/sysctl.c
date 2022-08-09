@@ -140,11 +140,6 @@ static unsigned long zero_ul;
 static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 
-#ifdef VENDOR_EDIT //yixue.ge@PSW.BSP.Kernel.Driver 20170720 add for add direct_vm_swappiness
-extern int direct_vm_swappiness;
-static int two_hundred = 200;
-#endif
-
 static int one_hundred = 100;
 #ifdef CONFIG_OPLUS_MM_HACKS
 extern int direct_vm_swappiness;
